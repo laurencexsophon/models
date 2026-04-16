@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sophon Node Emissions Model</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; color: #1a1a1a; padding: 24px; font-size: 14px; }
+  h1 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 20px; }
+  .section-label { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin: 20px 0 10px; }
+  .slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .slider-label { font-size: 13px; color: #333; min-width: 210px; }
+  .slider-row input[type=range] { flex: 1; accent-color: #378ADD; height: 4px; }
+  .slider-val { font-size: 13px; font-weight: 600; min-width: 90px; text-align: right; color: #1a1a1a; }
+  .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 16px 0; }
+  .metric-card { background: #f7f7f6; border-radius: 8px; padding: 12px 14px; }
+  .m-label { font-size: 11px; color: #888; margin-bottom: 5px; }
+  .m-value { font-size: 19px; font-weight: 600; color: #1a1a1a; line-height: 1.2; }
+  .m-delta { font-size: 11px; margin-top: 3px; }
+  .ownership-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 6px 0 8px; gap: 2px; }
+  .ownership-bar div { border-radius: 3px; transition: flex 0.15s; }
+  .ownership-legend { display: flex; gap: 14px; font-size: 12px; color: #666; margin-bottom: 12px; flex-wrap: wrap; }
+  .ownership-legend span { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .ownership-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .oc { background: #f7f7f6; border-radius: 8px; padding: 8px 10px; text-align: center; }
+  .oc-label { font-size: 11px; color: #888; margin-bottom: 2px; }
+  .oc-val { font-size: 14px; font-weight: 600; }
+  .divider { border: none; border-top: 1px solid #ebebeb; margin: 18px 0; }
+  .chart-wrap { position: relative; width: 100%; height: 220px; margin-top: 8px; }
+  .scenario-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .scenario-btn { font-size: 12px; padding: 5px 14px; border-radius: 6px; border: 1px solid #ddd; background: #fff; color: #666; cursor: pointer; }
+  .scenario-btn:hover { background: #f5f5f5; }
+  .scenario-btn.active { border-color: #378ADD; color: #185FA5; background: #E6F1FB; font-weight: 500; }
+  .chart-legend { display: flex; gap: 14px; font-size: 12px; color: #888; margin-bottom: 4px; flex-wrap: wrap; }
+  .chart-legend span { display: flex; align-items: center; gap: 5px; }
+</style>
+</head>
+<body>
+
+<h1>Sophon Node Emissions Model</h1>
+<p class="subtitle">Adjust inputs to see how changes affect emission values and buyback requirements</p>
+
+<div class="scenario-row">
+  <button class="scenario-btn active" onclick="applyScenario('base', this)">Base case</button>
+  <button class="scenario-btn" onclick="applyScenario('bull', this)">Bull case</button>
+  <button class="scenario-btn" onclick="applyScenario('bear', this)">Bear case</button>
+</div>
+
+<div class="section-label">Token economics</div>
+
+<div class="slider-row">
+  <span class="slider-label">Token price (USD)</span>
+  <input type="range" id="price" min="0.001" max="0.1" step="0.0001" value="0.0088" oninput="update()">
+  <span class="slider-val" id="price-out">$0.0088</span>
+</div>
+<div class="slider-row">
+  <span class="slider-label">FDV (implied)</span>
+  <input type="range" style="flex:1;opacity:0.25;pointer-events:none;" min="0" max="1000000000" value="88000000">
+  <span class="slider-val" id="fdv-out" style="color:#888;">$88M</span>
+</div>
+<div class="slider-row">
+  <span class="slider-label">Pending node emissions</span>
+  <input type="range" id="emissions" min="100000000" max="5000000000" step="1000000" value="1339950372" oninput="update()">
+  <span class="slider-val" id="emissions-out">1.34B</span>
+</div>
+<div class="slider-row">
+  <span class="slider-label">Buyback period (months)</span>
+  <input type="range" id="months" min="6" max="60" step="1" value="24" oninput="update()">
+  <span class="slider-val" id="months-out">24</span>
+</div>
+
+<div class="section-label">Node supply</div>
+
+<div class="slider-row">
+  <span class="slider-label">Nodes delegated</span>
+  <input type="range" id="delegated" min="50000" max="300000" step="100" value="154480" oninput="update()">
+  <span class="slider-val" id="delegated-out">154,480</span>
+</div>
+
+<div class="section-label">Node ownership</div>
+
+<div class="slider-row">
+  <span class="slider-label">% owned by Sophon</span>
+  <input type="range" id="sophonPct" min="0" max="50" step="0.1" value="2.23" oninput="update()">
+  <span class="slider-val" id="sophonPct-out">2.2%</span>
+</div>
+<div class="slider-row">
+  <span class="slider-label">% owned by investors</span>
+  <input type="range" id="investorPct" min="0" max="50" step="0.1" value="10" oninput="update()">
+  <span class="slider-val" id="investorPct-out">10.0%</span>
+</div>
+
+<div class="ownership-bar">
+  <div id="bar-sophon" style="background:#378ADD;"></div>
+  <div id="bar-investor" style="background:#1D9E75;"></div>
+  <div id="bar-public" style="background:#d3d1c7;"></div>
+</div>
+<div class="ownership-legend">
+  <span><span class="dot" style="background:#378ADD;"></span><span id="leg-sophon">Sophon 2.2%</span></span>
+  <span><span class="dot" style="background:#1D9E75;"></span><span id="leg-investor">Investors 10.0%</span></span>
+  <span><span class="dot" style="background:#d3d1c7;"></span><span id="leg-public">Public 87.8%</span></span>
+</div>
+
+<div class="ownership-cards">
+  <div class="oc"><div class="oc-label">Sophon nodes</div><div class="oc-val" id="sophon-count">—</div></div>
+  <div class="oc"><div class="oc-label">Investor nodes</div><div class="oc-val" id="investor-count">—</div></div>
+  <div class="oc"><div class="oc-label">Public nodes</div><div class="oc-val" id="public-count">—</div></div>
+</div>
+
+<hr class="divider">
+
+<div class="metrics-grid" id="metrics"></div>
+
+<hr class="divider">
+
+<div class="section-label">Sensitivity: token price vs per-node value</div>
+<div class="chart-legend">
+  <span><span class="dot" style="background:#378ADD;width:18px;height:3px;border-radius:2px;"></span>Per-node value</span>
+  <span><span class="dot" style="background:#D85A30;border-radius:50%;"></span>Current price</span>
+</div>
+<div class="chart-wrap">
+  <canvas id="sensitivityChart"></canvas>
+</div>
+
+<script>
+const TOTAL_SUPPLY = 10_000_000_000;
+const BASE = { price: 0.0088, delegated: 154480, sophonPct: 2.23, investorPct: 10, emissions: 1339950372, months: 24 };
+const BULL = { price: 0.025, delegated: 192000, sophonPct: 2.23, investorPct: 10, emissions: 1339950372, months: 24 };
+const BEAR = { price: 0.003, delegated: 128000, sophonPct: 2.23, investorPct: 10, emissions: 1339950372, months: 36 };
+
+function calc(p, delegated, sophonPct, investorPct, emissions, months) {
+  const totalEmissionValue = emissions * p;
+  const perNodeValue = delegated > 0 ? totalEmissionValue / delegated : 0;
+  const monthlyBuyback = months > 0 ? totalEmissionValue / months : 0;
+  const sophonNodes = Math.round(delegated * sophonPct / 100);
+  const investorNodes = Math.round(delegated * investorPct / 100);
+  const publicNodes = delegated - sophonNodes - investorNodes;
+  const sophonValue = totalEmissionValue * (sophonPct / 100);
+  const investorValue = totalEmissionValue * (investorPct / 100);
+  const publicValue = totalEmissionValue * ((100 - sophonPct - investorPct) / 100);
+  return { totalEmissionValue, perNodeValue, monthlyBuyback, sophonNodes, investorNodes, publicNodes, sophonValue, investorValue, publicValue };
+}
+
+function fmtBig(n) {
+  if (n >= 1e9) return '$' + (n/1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K';
+  return '$' + n.toLocaleString('en-US', {maximumFractionDigits: 0});
+}
+function fmtN(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return n.toLocaleString();
+}
+function pctDelta(val, base) {
+  const d = (val - base) / base * 100;
+  return (d >= 0 ? '+' : '') + d.toFixed(1) + '%';
+}
+function deltaColor(val, base) { return val >= base ? '#1D9E75' : '#D85A30'; }
+
+const baseVals = calc(BASE.price, BASE.delegated, BASE.sophonPct, BASE.investorPct, BASE.emissions, BASE.months);
+let chart;
+
+function update() {
+  const p = +document.getElementById('price').value;
+  const delegated = +document.getElementById('delegated').value;
+  const sophonPct = +document.getElementById('sophonPct').value;
+  const investorPct = +document.getElementById('investorPct').value;
+  const emissions = +document.getElementById('emissions').value;
+  const months = +document.getElementById('months').value;
+  const publicPct = Math.max(0, 100 - sophonPct - investorPct);
+
+  document.getElementById('price-out').textContent = '$' + p.toFixed(4);
+  document.getElementById('fdv-out').textContent = fmtBig(p * TOTAL_SUPPLY);
+  document.getElementById('emissions-out').textContent = fmtN(emissions);
+  document.getElementById('months-out').textContent = months;
+  document.getElementById('delegated-out').textContent = delegated.toLocaleString();
+  document.getElementById('sophonPct-out').textContent = sophonPct.toFixed(1) + '%';
+  document.getElementById('investorPct-out').textContent = investorPct.toFixed(1) + '%';
+
+  document.getElementById('bar-sophon').style.flex = sophonPct;
+  document.getElementById('bar-investor').style.flex = investorPct;
+  document.getElementById('bar-public').style.flex = publicPct;
+  document.getElementById('leg-sophon').textContent = 'Sophon ' + sophonPct.toFixed(1) + '%';
+  document.getElementById('leg-investor').textContent = 'Investors ' + investorPct.toFixed(1) + '%';
+  document.getElementById('leg-public').textContent = 'Public ' + publicPct.toFixed(1) + '%';
+
+  const v = calc(p, delegated, sophonPct, investorPct, emissions, months);
+  document.getElementById('sophon-count').textContent = v.sophonNodes.toLocaleString();
+  document.getElementById('investor-count').textContent = v.investorNodes.toLocaleString();
+  document.getElementById('public-count').textContent = v.publicNodes > 0 ? v.publicNodes.toLocaleString() : '—';
+
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric-card">
+      <div class="m-label">Total value of future emissions</div>
+      <div class="m-value">${fmtBig(v.totalEmissionValue)}</div>
+      <div class="m-delta" style="color:${deltaColor(v.totalEmissionValue, baseVals.totalEmissionValue)}">${pctDelta(v.totalEmissionValue, baseVals.totalEmissionValue)} vs base</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Monthly buyback to counter</div>
+      <div class="m-value">${fmtBig(v.monthlyBuyback)}</div>
+      <div class="m-delta" style="color:${deltaColor(v.monthlyBuyback, baseVals.monthlyBuyback)}">${pctDelta(v.monthlyBuyback, baseVals.monthlyBuyback)} vs base</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Per-node value of future emissions</div>
+      <div class="m-value">$${v.perNodeValue.toFixed(2)}</div>
+      <div class="m-delta" style="color:${deltaColor(v.perNodeValue, baseVals.perNodeValue)}">${pctDelta(v.perNodeValue, baseVals.perNodeValue)} vs base</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Sophon share of emissions</div>
+      <div class="m-value">${fmtBig(v.sophonValue)}</div>
+      <div class="m-delta" style="color:#888;">${sophonPct.toFixed(1)}% of total</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Investor share of emissions</div>
+      <div class="m-value">${fmtBig(v.investorValue)}</div>
+      <div class="m-delta" style="color:#888;">${investorPct.toFixed(1)}% of total</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Public share of emissions</div>
+      <div class="m-value">${fmtBig(v.publicValue)}</div>
+      <div class="m-delta" style="color:#888;">${publicPct.toFixed(1)}% of total</div>
+    </div>
+  `;
+
+  updateChart(p, delegated, sophonPct, investorPct, emissions, months);
+}
+
+function updateChart(currentPrice, delegated, sophonPct, investorPct, emissions, months) {
+  const prices = [], perNodeVals = [];
+  const steps = 40, minP = 0.001, maxP = 0.05;
+  for (let i = 0; i <= steps; i++) {
+    const pp = minP + (maxP - minP) * (i / steps);
+    prices.push(pp);
+    perNodeVals.push(+calc(pp, delegated, sophonPct, investorPct, emissions, months).perNodeValue.toFixed(2));
+  }
+  const idx = Math.min(Math.max(Math.round((currentPrice - minP) / (maxP - minP) * steps), 0), steps);
+
+  if (chart) {
+    chart.data.labels = prices.map(p => '$' + p.toFixed(4));
+    chart.data.datasets[0].data = perNodeVals;
+    chart.data.datasets[1].data = prices.map((_, i) => i === idx ? perNodeVals[idx] : null);
+    chart.update('none');
+    return;
+  }
+  chart = new Chart(document.getElementById('sensitivityChart'), {
+    type: 'line',
+    data: {
+      labels: prices.map(p => '$' + p.toFixed(4)),
+      datasets: [
+        { label: 'Per-node value', data: perNodeVals, borderColor: '#378ADD', backgroundColor: 'rgba(55,138,221,0.07)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2, pointHoverRadius: 4 },
+        { label: 'Current price', data: prices.map((_, i) => i === idx ? perNodeVals[idx] : null), borderColor: '#D85A30', backgroundColor: '#D85A30', pointRadius: 6, pointHoverRadius: 7, showLine: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '$' + ctx.parsed.y.toFixed(2) } } },
+      scales: {
+        x: { ticks: { autoSkip: true, maxTicksLimit: 8, font: { size: 11 }, color: '#888' }, grid: { color: 'rgba(0,0,0,0.06)' } },
+        y: { ticks: { font: { size: 11 }, color: '#888', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(0,0,0,0.06)' } }
+      }
+    }
+  });
+}
+
+function applyScenario(name, btn) {
+  document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const s = name === 'bull' ? BULL : name === 'bear' ? BEAR : BASE;
+  document.getElementById('price').value = s.price;
+  document.getElementById('delegated').value = s.delegated;
+  document.getElementById('sophonPct').value = s.sophonPct;
+  document.getElementById('investorPct').value = s.investorPct;
+  document.getElementById('emissions').value = s.emissions;
+  document.getElementById('months').value = s.months;
+  update();
+}
+
+update();
+</script>
+</body>
+</html>
