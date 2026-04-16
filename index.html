@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deposit Reward Cost Estimator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    color: #1a1a1a;
+    background: #ffffff;
+    padding: 24px;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #666; margin-bottom: 24px; }
+
+  .card {
+    background: #fff;
+    border: 0.5px solid #ddd;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .section-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 14px;
+  }
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 13px;
+  }
+  .slider-label { font-size: 13px; color: #555; min-width: 220px; }
+  .slider-val { font-size: 13px; font-weight: 500; min-width: 72px; text-align: right; color: #1a1a1a; }
+  input[type=range] {
+    flex: 1;
+    height: 4px;
+    accent-color: #185FA5;
+    cursor: pointer;
+  }
+
+  .grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .metric {
+    background: #f5f5f3;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .metric-label { font-size: 12px; color: #666; margin-bottom: 4px; }
+  .metric-value { font-size: 20px; font-weight: 500; color: #1a1a1a; margin-bottom: 2px; }
+  .metric-sub { font-size: 11px; color: #888; }
+
+  .scenario-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .scenario-card {
+    border-radius: 8px;
+    padding: 14px;
+    border: 0.5px solid #ddd;
+  }
+  .sc-label { font-size: 11px; font-weight: 500; margin-bottom: 6px; }
+  .sc-cost { font-size: 20px; font-weight: 500; margin-bottom: 3px; }
+  .sc-pct { font-size: 11px; }
+
+  .conservative { background: #EAF3DE; border-color: #c0dd97; }
+  .conservative .sc-label { color: #3B6D11; }
+  .conservative .sc-cost { color: #3B6D11; }
+  .conservative .sc-pct { color: #639922; }
+
+  .base { background: #E6F1FB; border-color: #b5d4f4; }
+  .base .sc-label { color: #185FA5; }
+  .base .sc-cost { color: #185FA5; }
+  .base .sc-pct { color: #378ADD; }
+
+  .highuptake { background: #FAEEDA; border-color: #fac775; }
+  .highuptake .sc-label { color: #854F0B; }
+  .highuptake .sc-cost { color: #854F0B; }
+  .highuptake .sc-pct { color: #BA7517; }
+
+  hr { border: none; border-top: 0.5px solid #e5e5e5; margin: 16px 0; }
+
+  .chart-wrapper { position: relative; width: 100%; height: 220px; }
+
+  .legend { display: flex; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #555; }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+
+  @media (max-width: 580px) {
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .scenario-grid { grid-template-columns: 1fr; }
+    .slider-label { min-width: 160px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Deposit reward cost estimator</h1>
+<p class="subtitle">Spin-the-wheel deposit incentive — weekly cadence, credit-only rewards</p>
+
+<div class="card">
+  <div class="section-label">Programme parameters</div>
+
+  <div class="slider-row">
+    <span class="slider-label">Monthly deposit volume (£M)</span>
+    <input type="range" min="1" max="200" step="1" value="50" id="vol" oninput="calc()">
+    <span class="slider-val" id="vol-out">£50M</span>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Active users (k)</span>
+    <input type="range" min="1" max="500" step="1" value="50" id="users" oninput="calc()">
+    <span class="slider-val" id="users-out">50k</span>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Participation rate (%)</span>
+    <input type="range" min="5" max="100" step="1" value="40" id="part" oninput="calc()">
+    <span class="slider-val" id="part-out">40%</span>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Win rate on spin (%)</span>
+    <input type="range" min="5" max="80" step="1" value="50" id="win" oninput="calc()">
+    <span class="slider-val" id="win-out">50%</span>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Avg reward when won (% of deposit)</span>
+    <input type="range" min="0.1" max="4" step="0.1" value="1.5" id="pct" oninput="calc()">
+    <span class="slider-val" id="pct-out">1.5%</span>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Reward cap per spin (£)</span>
+    <input type="range" min="10" max="500" step="10" value="100" id="cap" oninput="calc()">
+    <span class="slider-val" id="cap-out">£100</span>
+  </div>
+  <div class="slider-row">
+    <span class="slider-label">Avg deposit per spin (£)</span>
+    <input type="range" min="100" max="10000" step="100" value="1000" id="dep" oninput="calc()">
+    <span class="slider-val" id="dep-out">£1,000</span>
+  </div>
+</div>
+
+<div class="section-label">Weekly cost metrics</div>
+<div class="grid-4" id="metrics"></div>
+
+<div class="section-label">Annual cost scenarios</div>
+<div class="scenario-grid" id="scenarios"></div>
+
+<hr>
+
+<div class="card">
+  <div class="section-label">Annual cost as % of deposit volume</div>
+  <div class="legend">
+    <span class="legend-item"><span class="legend-swatch" style="background:#3B6D11"></span>Conservative</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#185FA5"></span>Base case</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#854F0B"></span>High uptake</span>
+  </div>
+  <div class="chart-wrapper">
+    <canvas id="costChart" role="img" aria-label="Bar chart showing annual cost as a percentage of deposit volume across three scenarios.">Cost scenario comparison chart.</canvas>
+  </div>
+</div>
+
+<script>
+let chart;
+
+function fmt(n) {
+  if (n >= 1e6) return '£' + (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '£' + (n / 1e3).toFixed(1) + 'k';
+  return '£' + Math.round(n);
+}
+
+function calcCost(winRate, rewardPct, cap, avgDeposit, spins) {
+  const uncapped = avgDeposit * (rewardPct / 100);
+  const effectiveReward = Math.min(uncapped, cap);
+  return effectiveReward * (winRate / 100) * spins;
+}
+
+function calc() {
+  const vol = parseFloat(document.getElementById('vol').value) * 1e6;
+  const users = parseFloat(document.getElementById('users').value) * 1000;
+  const part = parseFloat(document.getElementById('part').value) / 100;
+  const win = parseFloat(document.getElementById('win').value) / 100;
+  const pct = parseFloat(document.getElementById('pct').value) / 100;
+  const cap = parseFloat(document.getElementById('cap').value);
+  const dep = parseFloat(document.getElementById('dep').value);
+
+  document.getElementById('vol-out').textContent = '£' + parseFloat(document.getElementById('vol').value) + 'M';
+  document.getElementById('users-out').textContent = parseFloat(document.getElementById('users').value) + 'k';
+  document.getElementById('part-out').textContent = parseFloat(document.getElementById('part').value) + '%';
+  document.getElementById('win-out').textContent = parseFloat(document.getElementById('win').value) + '%';
+  document.getElementById('pct-out').textContent = parseFloat(document.getElementById('pct').value) + '%';
+  document.getElementById('cap-out').textContent = '£' + parseFloat(document.getElementById('cap').value);
+  document.getElementById('dep-out').textContent = '£' + parseInt(document.getElementById('dep').value).toLocaleString();
+
+  const spinsPerWeek = users * part;
+  const uncapped = dep * pct;
+  const effectiveReward = Math.min(uncapped, cap);
+  const capBound = uncapped > cap;
+  const weekCost = effectiveReward * win * spinsPerWeek;
+  const annCost = weekCost * 52;
+  const expectedVal = effectiveReward * win;
+  const costPct = (weekCost / (vol / 4.33)) * 100;
+
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric">
+      <div class="metric-label">Spins per week</div>
+      <div class="metric-value">${Math.round(spinsPerWeek).toLocaleString()}</div>
+      <div class="metric-sub">${Math.round(users/1000)}k users × ${Math.round(part*100)}% participation</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Expected reward / spin</div>
+      <div class="metric-value">${fmt(expectedVal)}</div>
+      <div class="metric-sub">${capBound ? 'Cap active at £'+cap : 'Uncapped at this level'}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Weekly cost</div>
+      <div class="metric-value">${fmt(weekCost)}</div>
+      <div class="metric-sub">${costPct.toFixed(3)}% of weekly deposit vol</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Annual cost (base)</div>
+      <div class="metric-value">${fmt(annCost)}</div>
+      <div class="metric-sub">At current parameters</div>
+    </div>
+  `;
+
+  const scenarios = [
+    { label: 'Conservative', win: win * 0.6, pct: pct * 0.6, part: part * 0.6, cls: 'conservative' },
+    { label: 'Base case',    win,              pct,              part,              cls: 'base' },
+    { label: 'High uptake',  win: Math.min(win * 1.4, 0.8), pct: Math.min(pct * 1.4, 0.04), part: Math.min(part * 1.5, 1), cls: 'highuptake' },
+  ];
+
+  const scHtml = scenarios.map(s => {
+    const sc = calcCost(s.win * 100, s.pct * 100, cap, dep, users * s.part) * 52;
+    return `<div class="scenario-card ${s.cls}">
+      <div class="sc-label">${s.label}</div>
+      <div class="sc-cost">${fmt(sc)}<span style="font-size:13px;font-weight:400">/yr</span></div>
+      <div class="sc-pct">${(sc / (vol * 12) * 100).toFixed(3)}% of annual deposit volume</div>
+    </div>`;
+  }).join('');
+  document.getElementById('scenarios').innerHTML = scHtml;
+
+  const scData = scenarios.map(s => {
+    const sc = calcCost(s.win * 100, s.pct * 100, cap, dep, users * s.part) * 52;
+    return +((sc / (vol * 12)) * 100).toFixed(4);
+  });
+
+  if (chart) {
+    chart.data.datasets[0].data = scData;
+    chart.update();
+  } else {
+    chart = new Chart(document.getElementById('costChart'), {
+      type: 'bar',
+      data: {
+        labels: ['Conservative', 'Base case', 'High uptake'],
+        datasets: [{
+          label: 'Annual cost as % of annual deposit volume',
+          data: scData,
+          backgroundColor: ['#3B6D11', '#185FA5', '#854F0B'],
+          borderRadius: 4,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ctx.parsed.y.toFixed(4) + '% of annual deposit volume'
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { callback: v => v.toFixed(3) + '%', font: { size: 12 } },
+            grid: { color: 'rgba(0,0,0,0.06)' }
+          },
+          x: { ticks: { font: { size: 12 } }, grid: { display: false } }
+        }
+      }
+    });
+  }
+}
+
+calc();
+</script>
+</body>
+</html>
