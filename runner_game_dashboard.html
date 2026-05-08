@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Runner Game — Revenue Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: #f9fafb; color: #111; padding: 2rem 1rem; }
+  .container { max-width: 780px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 500; color: #1e1b4b; margin-bottom: 0.25rem; }
+  .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 2rem; }
+  .tab-bar { display: flex; gap: 8px; margin-bottom: 1.5rem; }
+  .tab { padding: 8px 20px; border-radius: 8px; border: 0.5px solid #d1d5db; font-size: 14px; cursor: pointer; background: #fff; color: #6b7280; }
+  .tab.active { background: #4F46E5; color: #fff; border-color: #4F46E5; }
+  .tab:hover:not(.active) { background: #f3f4f6; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .slabel { font-size: 11px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; margin: 1.5rem 0 0.75rem; }
+  .ctrl-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .ctrl-label { font-size: 13px; color: #6b7280; min-width: 220px; }
+  .ctrl-val { font-size: 13px; font-weight: 500; color: #111; min-width: 80px; text-align: right; }
+  input[type=range] { flex: 1; accent-color: #4F46E5; }
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 1rem 0 1.5rem; }
+  .metric { background: #f3f4f6; border-radius: 8px; padding: 12px 14px; }
+  .metric-label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+  .metric-value { font-size: 22px; font-weight: 500; color: #111; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 12px; font-size: 12px; color: #6b7280; }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  canvas { display: block; width: 100% !important; }
+  .vol-box { border: 0.5px solid #e5e7eb; border-radius: 12px; padding: 1rem 1.25rem; margin-top: 1.5rem; background: #fff; }
+  .vol-title { font-size: 11px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem; }
+  .vol-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 1rem; }
+  .vol-metric { background: #f3f4f6; border-radius: 8px; padding: 12px 14px; }
+  .vol-metric-label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+  .vol-metric-value { font-size: 20px; font-weight: 500; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #111827; color: #f9fafb; }
+    h1 { color: #a5b4fc; }
+    .subtitle { color: #9ca3af; }
+    .tab { background: #1f2937; color: #9ca3af; border-color: #374151; }
+    .tab:hover:not(.active) { background: #374151; }
+    .metric, .vol-metric { background: #1f2937; }
+    .metric-value, .vol-metric-value { color: #f9fafb; }
+    .metric-label, .vol-metric-label { color: #9ca3af; }
+    .ctrl-label, .ctrl-val { color: #d1d5db; }
+    .ctrl-val { color: #f9fafb; }
+    .legend { color: #9ca3af; }
+    .vol-box { background: #1f2937; border-color: #374151; }
+    .slabel { color: #9ca3af; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Runner Game — Revenue Model</h1>
+  <p class="subtitle">Adjust parameters to project returns across pay-to-play and free-to-play entry mechanisms.</p>
+
+  <div class="tab-bar">
+    <button class="tab active" onclick="switchTab('p2p')">Pay-to-play</button>
+    <button class="tab" onclick="switchTab('f2p')">Free-to-play</button>
+  </div>
+
+  <div id="panel-p2p" class="panel active">
+    <div class="slabel">Parameters</div>
+    <div class="ctrl-row"><span class="ctrl-label">House edge</span><input type="range" min="51" max="65" value="55" step="1" id="p2p-edge" oninput="updateP2P()"><span class="ctrl-val" id="p2p-edge-out">55%</span></div>
+    <div class="ctrl-row"><span class="ctrl-label">Average stake (£)</span><input type="range" min="1" max="50" value="12" step="1" id="p2p-stake" oninput="updateP2P()"><span class="ctrl-val" id="p2p-stake-out">£12</span></div>
+    <div class="ctrl-row"><span class="ctrl-label">Games per player per month</span><input type="range" min="0" max="50" value="20" step="1" id="p2p-freq" oninput="updateP2P()"><span class="ctrl-val" id="p2p-freq-out">20</span></div>
+    <div class="slabel">Projected returns (at 1K MAU)</div>
+    <div class="metric-grid" id="p2p-metrics"></div>
+    <div class="legend">
+      <span><span style="display:inline-block;width:24px;height:3px;background:#4F46E5;border-radius:2px;vertical-align:middle"></span>Monthly return</span>
+    </div>
+    <canvas id="p2p-chart" height="280" role="img" aria-label="Pay-to-play projected monthly returns up to 50K MAU"></canvas>
+    <div class="vol-box">
+      <div class="vol-title">Returns at a specific user volume</div>
+      <div class="ctrl-row"><span class="ctrl-label">Monthly active users</span><input type="range" min="100" max="50000" value="1000" step="100" id="p2p-mau" oninput="updateP2P()"><span class="ctrl-val" id="p2p-mau-out">1,000</span></div>
+      <div class="vol-grid" id="p2p-vol"></div>
+    </div>
+  </div>
+
+  <div id="panel-f2p" class="panel">
+    <div class="slabel">Parameters</div>
+    <div class="ctrl-row"><span class="ctrl-label">House edge</span><input type="range" min="20" max="80" value="55" step="1" id="f2p-edge" oninput="updateF2P()"><span class="ctrl-val" id="f2p-edge-out">55%</span></div>
+    <div class="ctrl-row"><span class="ctrl-label">Average reward value (£)</span><input type="range" min="0.10" max="20" value="5" step="0.10" id="f2p-reward" oninput="updateF2P()"><span class="ctrl-val" id="f2p-reward-out">£5.00</span></div>
+    <div class="ctrl-row"><span class="ctrl-label">Entries per player per month</span><input type="range" min="1" max="30" value="8" step="1" id="f2p-freq" oninput="updateF2P()"><span class="ctrl-val" id="f2p-freq-out">8</span></div>
+    <div class="ctrl-row"><span class="ctrl-label">Interchange revenue per entry (£)</span><input type="range" min="-0.50" max="2" value="0.50" step="0.05" id="f2p-interchange" oninput="updateF2P()"><span class="ctrl-val" id="f2p-interchange-out">£0.50</span></div>
+    <div class="slabel">Cost & revenue breakdown (at 1K MAU)</div>
+    <div class="metric-grid" id="f2p-metrics"></div>
+    <div class="legend">
+      <span><span style="display:inline-block;width:24px;height:3px;background:#0F6E56;border-radius:2px;vertical-align:middle"></span>Interchange</span>
+      <span><span style="display:inline-block;width:24px;height:3px;background:#4F46E5;border-radius:2px;vertical-align:middle"></span>Prize liability</span>
+      <span><span style="display:inline-block;width:24px;height:3px;background:#D85A30;border-radius:2px;vertical-align:middle"></span>Net position</span>
+    </div>
+    <canvas id="f2p-chart" height="280" role="img" aria-label="Free-to-play cost and revenue breakdown up to 50K MAU"></canvas>
+    <div class="vol-box">
+      <div class="vol-title">Returns at a specific user volume</div>
+      <div class="ctrl-row"><span class="ctrl-label">Monthly active users</span><input type="range" min="100" max="50000" value="1000" step="100" id="f2p-mau" oninput="updateF2P()"><span class="ctrl-val" id="f2p-mau-out">1,000</span></div>
+      <div class="vol-grid" id="f2p-vol"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const MAUS=[100,500,1000,2500,5000,10000,15000,20000,25000,35000,50000];
+const LABS=['100','500','1K','2.5K','5K','10K','15K','20K','25K','35K','50K'];
+const PAD={t:20,r:20,b:40,l:72};
+
+function fv(n){
+  const a=Math.abs(n);
+  let s=a>=1000000?(a/1000000).toFixed(1)+'M':a>=1000?Math.round(a/1000)+'K':Math.round(a)+'';
+  return(n<0?'-£':'£')+s;
+}
+function numFmt(n){return Math.round(n).toLocaleString();}
+
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  document.querySelector('[onclick="switchTab(\''+t+'\')"]').classList.add('active');
+  document.getElementById('panel-'+t).classList.add('active');
+  if(t==='p2p')updateP2P();else updateF2P();
+}
+
+function draw(id,lines,yMin,yMax){
+  const canvas=document.getElementById(id);
+  const rect=canvas.parentElement.getBoundingClientRect();
+  const DPR=window.devicePixelRatio||1;
+  const W=Math.floor(rect.width)||700;
+  const H=280;
+  canvas.width=W*DPR; canvas.height=H*DPR;
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  const ctx=canvas.getContext('2d');
+  ctx.scale(DPR,DPR);
+  ctx.clearRect(0,0,W,H);
+  const cw=W-PAD.l-PAD.r, ch=H-PAD.t-PAD.b;
+  const n=MAUS.length;
+  const xp=i=>PAD.l+i*(cw/(n-1));
+  const yp=v=>PAD.t+ch-(v-yMin)/(yMax-yMin)*ch;
+  const dark=matchMedia('(prefers-color-scheme:dark)').matches;
+  const tc=dark?'#9ca3af':'#6b7280';
+  const gc=dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.07)';
+
+  for(let i=0;i<=5;i++){
+    const v=yMin+(yMax-yMin)*i/5;
+    const y=yp(v);
+    ctx.beginPath();ctx.strokeStyle=gc;ctx.lineWidth=1;
+    ctx.moveTo(PAD.l,y);ctx.lineTo(W-PAD.r,y);ctx.stroke();
+    ctx.fillStyle=tc;ctx.font='11px Arial';ctx.textAlign='right';
+    ctx.fillText(fv(v),PAD.l-5,y+4);
+  }
+  ctx.fillStyle=tc;ctx.font='11px Arial';ctx.textAlign='center';
+  for(let i=0;i<n;i++) ctx.fillText(LABS[i],xp(i),H-PAD.b+16);
+  ctx.fillText('Monthly active players',W/2,H-2);
+
+  const z=yp(0);
+  if(z>=PAD.t&&z<=PAD.t+ch){
+    ctx.beginPath();
+    ctx.strokeStyle=dark?'rgba(255,255,255,0.25)':'rgba(0,0,0,0.2)';
+    ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.moveTo(PAD.l,z);ctx.lineTo(W-PAD.r,z);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  for(const line of lines){
+    ctx.beginPath();ctx.strokeStyle=line.color;
+    ctx.lineWidth=line.width||2.5;ctx.setLineDash(line.dash||[]);
+    for(let i=0;i<line.data.length;i++){
+      const x=xp(i),y=yp(line.data[i]);
+      if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+    }
+    ctx.stroke();ctx.setLineDash([]);
+    for(let i=0;i<line.data.length;i++){
+      ctx.beginPath();ctx.fillStyle=line.color;
+      ctx.arc(xp(i),yp(line.data[i]),3,0,Math.PI*2);ctx.fill();
+    }
+  }
+}
+
+function volMetric(label,monthly,annual,color){
+  return '<div class="vol-metric">'+
+    '<div class="vol-metric-label">'+label+'</div>'+
+    '<div class="vol-metric-value" style="color:'+color+'">'+fv(monthly)+'<span style="font-size:13px;font-weight:400;color:#6b7280"> / mo</span></div>'+
+    '<div style="font-size:13px;color:#6b7280;margin-top:2px">'+fv(annual)+' / yr</div>'+
+  '</div>';
+}
+
+function updateP2P(){
+  const edge=parseInt(document.getElementById('p2p-edge').value);
+  const stake=parseInt(document.getElementById('p2p-stake').value);
+  const freq=parseInt(document.getElementById('p2p-freq').value);
+  const mau=parseInt(document.getElementById('p2p-mau').value);
+  document.getElementById('p2p-edge-out').textContent=edge+'%';
+  document.getElementById('p2p-stake-out').textContent='£'+stake;
+  document.getElementById('p2p-freq-out').textContent=freq;
+  document.getElementById('p2p-mau-out').textContent=numFmt(mau);
+
+  const p=edge/100,npg=stake*(2*p-1);
+  const exp=MAUS.map(m=>m*freq*npg);
+
+  document.getElementById('p2p-metrics').innerHTML=
+    '<div class="metric"><div class="metric-label">Return per game</div><div class="metric-value">'+fv(npg)+'</div></div>'+
+    '<div class="metric"><div class="metric-label">Monthly (1K MAU)</div><div class="metric-value">'+fv(1000*freq*npg)+'</div></div>'+
+    '<div class="metric"><div class="metric-label">Annual (1K MAU)</div><div class="metric-value">'+fv(1000*freq*npg*12)+'</div></div>'+
+    '<div class="metric"><div class="metric-label">Return on volume</div><div class="metric-value">'+(2*edge-100)+'%</div></div>';
+
+  const monthly=mau*freq*npg;
+  const nc=monthly>=0?'#0F6E56':'#D85A30';
+  document.getElementById('p2p-vol').innerHTML=
+    volMetric('Net return',monthly,monthly*12,nc)+
+    volMetric('Total wagered',mau*freq*stake,mau*freq*stake*12,'#111')+
+    volMetric('Total games played',mau*freq,mau*freq*12,'#6b7280');
+
+  const yMin=Math.min(...exp,0)*1.2;
+  const yMax=Math.max(...exp,0)*1.15;
+  draw('p2p-chart',[{data:exp,color:'#4F46E5',width:2.5}],yMin||(-100),yMax||(100));
+}
+
+function updateF2P(){
+  const edge=parseInt(document.getElementById('f2p-edge').value);
+  const reward=parseFloat(document.getElementById('f2p-reward').value);
+  const freq=parseInt(document.getElementById('f2p-freq').value);
+  const ic=parseFloat(document.getElementById('f2p-interchange').value);
+  const mau=parseInt(document.getElementById('f2p-mau').value);
+  document.getElementById('f2p-edge-out').textContent=edge+'%';
+  document.getElementById('f2p-reward-out').textContent='£'+reward.toFixed(2);
+  document.getElementById('f2p-freq-out').textContent=freq;
+  document.getElementById('f2p-interchange-out').textContent=(ic<0?'-£':'£')+Math.abs(ic).toFixed(2);
+  document.getElementById('f2p-mau-out').textContent=numFmt(mau);
+
+  const cost=(1-edge/100)*reward;
+  const net=ic-cost;
+  const nc=net>=0?'#0F6E56':'#D85A30';
+
+  document.getElementById('f2p-metrics').innerHTML=
+    '<div class="metric"><div class="metric-label">Cost per entry</div><div class="metric-value">'+fv(cost)+'</div></div>'+
+    '<div class="metric"><div class="metric-label">Interchange per entry</div><div class="metric-value">'+(ic<0?'-£':'£')+Math.abs(ic).toFixed(2)+'</div></div>'+
+    '<div class="metric"><div class="metric-label">Net per entry</div><div class="metric-value" style="color:'+nc+'">'+(net>=0?'+':'')+fv(net)+'</div></div>'+
+    '<div class="metric"><div class="metric-label">Monthly net (1K MAU)</div><div class="metric-value" style="color:'+nc+'">'+fv(1000*freq*net)+'</div></div>';
+
+  const icM=mau*freq*ic;
+  const liM=mau*freq*cost;
+  const neM=mau*freq*net;
+  const nec=neM>=0?'#0F6E56':'#D85A30';
+
+  document.getElementById('f2p-vol').innerHTML=
+    volMetric('Interchange revenue',icM,icM*12,'#0F6E56')+
+    volMetric('Prize liability',liM,liM*12,'#4F46E5')+
+    volMetric('Net position',neM,neM*12,nec);
+
+  const icD=MAUS.map(m=>m*freq*ic);
+  const liD=MAUS.map(m=>m*freq*cost);
+  const neD=MAUS.map(m=>m*freq*net);
+  const all=[...icD,...liD,...neD,0];
+  draw('f2p-chart',[
+    {data:icD,color:'#0F6E56',width:2.5},
+    {data:liD,color:'#4F46E5',width:2,dash:[6,4]},
+    {data:neD,color:'#D85A30',width:2.5},
+  ],Math.min(...all)*1.2,Math.max(...all)*1.15);
+}
+
+window.addEventListener('resize',()=>{updateP2P();updateF2P();});
+updateP2P();
+updateF2P();
+</script>
+</body>
+</html>
