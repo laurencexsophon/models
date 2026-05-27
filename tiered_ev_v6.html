@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pyre — Tiered EV Calculator v6</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f9fafb;color:#111;padding:2rem 1rem}
+.container{max-width:920px;margin:0 auto}
+h1{font-size:20px;font-weight:500;color:#1e1b4b;margin-bottom:.2rem}
+.subtitle{font-size:13px;color:#6b7280;margin-bottom:1.5rem}
+.tier-tabs{display:flex;gap:6px;margin-bottom:1.5rem;flex-wrap:wrap}
+.tier-tab{padding:7px 16px;border-radius:8px;border:1px solid #d1d5db;font-size:13px;cursor:pointer;background:#fff;color:#6b7280;white-space:nowrap}
+.tier-tab.active{background:#4F46E5;color:#fff;border-color:#4F46E5}
+.tier-tab:hover:not(.active){background:#f3f4f6}
+.panel{display:none}.panel.active{display:block}
+.slabel{font-size:11px;font-weight:500;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin:1.2rem 0 .6rem}
+.inputs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:1rem}
+.input-group{display:flex;flex-direction:column;gap:4px}
+.input-group label{font-size:12px;color:#6b7280;font-weight:500}
+.input-group input{background:#fff;border:1px solid #d1d5db;border-radius:6px;padding:6px 10px;font-size:14px;color:#111;width:100%}
+.input-group input:focus{outline:none;border-color:#4F46E5}
+.hint{font-size:11px;color:#9ca3af}
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:1rem 0}
+.metric{background:#f3f4f6;border-radius:8px;padding:10px 12px}
+.metric-label{font-size:11px;color:#6b7280;margin-bottom:3px}
+.metric-value{font-size:19px;font-weight:500;color:#111}
+.metric-sub{font-size:11px;color:#9ca3af;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:.5rem}
+thead th{font-size:11px;font-weight:500;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;padding:7px 10px;border-bottom:1px solid #e5e7eb;text-align:left;background:#f9fafb}
+tbody td{padding:6px 10px;border-bottom:1px solid #f3f4f6;vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr.cashback-row td:first-child{color:#0F6E56}
+input.prob-inp{width:86px;background:#fffbeb;border:1px solid #d1d5db;border-radius:6px;padding:4px 8px;font-size:13px;color:#1d4ed8;text-align:right;font-weight:500}
+input.val-inp{width:80px;background:#fffbeb;border:1px solid #d1d5db;border-radius:6px;padding:4px 8px;font-size:13px;color:#1d4ed8;text-align:right;font-weight:500}
+input:focus{outline:none;border-color:#4F46E5}
+.calc-cell{font-size:13px;color:#374151}
+.type-badge{font-size:10px;padding:1px 6px;border-radius:99px;font-weight:500;margin-left:4px}
+.type-cashback{background:#D1FAE5;color:#065F46}
+.type-credit{background:#EEF2FF;color:#3730A3}
+.total-row td{font-weight:600;background:#f3f4f6;border-top:1px solid #e5e7eb!important}
+.warn-box{font-size:13px;padding:8px 12px;border-radius:8px;margin-top:8px;display:none}
+.warn-box.show{display:block;background:#FEF3C7;color:#92400E}
+.divider{border:none;border-top:1px solid #e5e7eb;margin:1.2rem 0}
+.summary-bar{background:#EEF2FF;border-radius:10px;padding:1rem 1.25rem;margin-top:1.5rem}
+.summary-bar h3{font-size:12px;font-weight:500;color:#4F46E5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
+.summary-metric{background:#fff;border-radius:8px;padding:10px 12px}
+.summary-metric-label{font-size:11px;color:#6b7280;margin-bottom:3px}
+.summary-metric-value{font-size:18px;font-weight:500;color:#1e1b4b}
+.summary-metric-sub{font-size:11px;color:#9ca3af;margin-top:2px}
+.note{font-size:12px;color:#6b7280;margin-bottom:8px;padding:8px 12px;background:#F0FDF4;border-radius:6px;border-left:3px solid #0F6E56}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Pyre Runner — Tiered EV Calculator</h1>
+  <p class="subtitle">Mixed cashback + credit outcomes. No $0 prize. 35% game win rate. No $0 outcome. 35% win rate. All wins earn a financial reward. T4/T5 have higher cashback floors.</p>
+  <div class="slabel">Global parameters</div>
+  <div class="inputs-grid">
+    <div class="input-group">
+      <label>Game win rate (%)</label>
+      <input type="number" id="win-rate" value="35" min="1" max="99" step="0.1" oninput="recalcAll()">
+      <span class="hint">% of games reaching target</span>
+    </div>
+    <div class="input-group">
+      <label>Monthly active users</label>
+      <input type="number" id="mau" value="1000" min="1" step="100" oninput="recalcAll()">
+      <span class="hint">MAU</span>
+    </div>
+  </div>
+  <hr class="divider">
+  <div class="tier-tabs">
+    <button class="tier-tab active" onclick="switchTier(0)">Tier 1: $1-$19</button>
+    <button class="tier-tab" onclick="switchTier(1)">Tier 2: $20-$49</button>
+    <button class="tier-tab" onclick="switchTier(2)">Tier 3: $50-$99</button>
+    <button class="tier-tab" onclick="switchTier(3)">Tier 4: $100-$249</button>
+    <button class="tier-tab" onclick="switchTier(4)">Tier 5: $250+</button>
+  </div>
+  <div id="panel-0" class="panel active"></div>
+  <div id="panel-1" class="panel"></div>
+  <div id="panel-2" class="panel"></div>
+  <div id="panel-3" class="panel"></div>
+  <div id="panel-4" class="panel"></div>
+  <div class="summary-bar">
+    <h3>Platform summary — all tiers</h3>
+    <div class="summary-grid" id="summary-grid"></div>
+  </div>
+</div>
+<script>
+const TIERS=[
+  {name:'Tier 1',band:'$1-$19',minTxn:1,txnsPerUser:10,evTarget:0.097,
+   outcomes:[
+    {label:'1% cashback ($0.10)', type:'cashback',prob:50.000,value:0.10},
+    {label:'2% cashback ($0.20)', type:'cashback',prob:32.825,value:0.20},
+    {label:'5% cashback ($0.50)', type:'cashback',prob:11.311,value:0.50},
+    {label:'$1 credit',           type:'credit',  prob:3.898, value:1.00},
+    {label:'$2 credit',           type:'credit',  prob:1.343, value:2.00},
+    {label:'$5 credit',           type:'credit',  prob:0.463, value:5.00},
+    {label:'$10 credit',          type:'credit',  prob:0.159, value:10.00},
+   ]},
+  {name:'Tier 2',band:'$20-$49',minTxn:20,txnsPerUser:12,evTarget:0.60,
+   outcomes:[
+    {label:'1% cashback ($0.35)', type:'cashback',prob:35.000,value:0.35},
+    {label:'2% cashback ($0.70)', type:'cashback',prob:26.885,value:0.70},
+    {label:'5% cashback ($1.75)', type:'cashback',prob:15.820,value:1.75},
+    {label:'$1 credit',           type:'credit',  prob:9.309, value:1.00},
+    {label:'$2 credit',           type:'credit',  prob:5.478, value:2.00},
+    {label:'$5 credit',           type:'credit',  prob:3.224, value:5.00},
+    {label:'10% cashback ($3.50)',type:'cashback', prob:1.897, value:3.50},
+    {label:'$10 credit',          type:'credit',  prob:1.116, value:10.00},
+    {label:'$25 credit',          type:'credit',  prob:0.657, value:25.00},
+    {label:'$50 credit',          type:'credit',  prob:0.387, value:50.00},
+    {label:'$100 credit',         type:'credit',  prob:0.227, value:100.00},
+   ]},
+  {name:'Tier 3',band:'$50-$99',minTxn:50,txnsPerUser:8,evTarget:1.50,
+   outcomes:[
+    {label:'1% cashback ($0.75)', type:'cashback',prob:36.679,value:0.75},
+    {label:'2% cashback ($1.50)', type:'cashback',prob:23.318,value:1.50},
+    {label:'5% cashback ($3.75)', type:'cashback',prob:14.824,value:3.75},
+    {label:'$2 credit',           type:'credit',  prob:9.424, value:2.00},
+    {label:'$5 credit',           type:'credit',  prob:5.991, value:5.00},
+    {label:'10% cashback ($7.50)',type:'cashback', prob:3.808, value:7.50},
+    {label:'$10 credit',          type:'credit',  prob:2.421, value:10.00},
+    {label:'$25 credit',          type:'credit',  prob:1.539, value:25.00},
+    {label:'$50 credit',          type:'credit',  prob:0.978, value:50.00},
+    {label:'$100 credit',         type:'credit',  prob:0.622, value:100.00},
+    {label:'$150 credit',         type:'credit',  prob:0.395, value:150.00},
+   ]},
+  {name:'Tier 4',band:'$100-$249',minTxn:100,txnsPerUser:4,evTarget:3.00,
+   outcomes:[
+    {label:'2% cashback ($3.50)', type:'cashback',prob:35.000,value:3.50},
+    {label:'3% cashback ($5.25)', type:'cashback',prob:23.296,value:5.25},
+    {label:'$5 credit',           type:'credit',  prob:15.053,value:5.00},
+    {label:'5% cashback ($8.75)', type:'cashback',prob:9.726, value:8.75},
+    {label:'$10 credit',          type:'credit',  prob:6.285, value:10.00},
+    {label:'$15 credit',          type:'credit',  prob:4.061, value:15.00},
+    {label:'10% cashback ($17.50)',type:'cashback',prob:2.624,value:17.50},
+    {label:'$25 credit',          type:'credit',  prob:1.695, value:25.00},
+    {label:'$50 credit',          type:'credit',  prob:1.096, value:50.00},
+    {label:'$100 credit',         type:'credit',  prob:0.708, value:100.00},
+    {label:'$250 credit',         type:'credit',  prob:0.457, value:250.00},
+   ]},
+  {name:'Tier 5',band:'$250+',minTxn:250,txnsPerUser:1,evTarget:7.50,
+   outcomes:[
+    {label:'3% cashback ($10.50)',type:'cashback', prob:35.000,value:10.50},
+    {label:'5% cashback ($17.50)',type:'cashback', prob:29.198,value:17.50},
+    {label:'$10 credit',          type:'credit',  prob:16.117,value:10.00},
+    {label:'$25 credit',          type:'credit',  prob:8.896, value:25.00},
+    {label:'10% cashback ($35)',  type:'cashback', prob:4.910, value:35.00},
+    {label:'$50 credit',          type:'credit',  prob:2.710, value:50.00},
+    {label:'$75 credit',          type:'credit',  prob:1.496, value:75.00},
+    {label:'$100 credit',         type:'credit',  prob:0.826, value:100.00},
+    {label:'$250 credit',         type:'credit',  prob:0.456, value:250.00},
+    {label:'$500 credit',         type:'credit',  prob:0.252, value:500.00},
+    {label:'$1,000 credit',       type:'credit',  prob:0.139, value:1000.00},
+   ]},
+];
+
+function fmtD(n,dp){dp=dp==null?3:dp;return'$'+Math.abs(n).toFixed(dp);}
+function fmtDL(n){var a=Math.abs(n);var s=a>=1000000?(a/1000000).toFixed(2)+'M':a>=1000?(a/1000).toFixed(1)+'K':a.toFixed(0);return(n<0?'-$':'$')+s;}
+function fmtN(n){return Math.round(n).toLocaleString();}
+function switchTier(i){
+  document.querySelectorAll('.tier-tab').forEach(function(t,j){t.classList.toggle('active',i===j);});
+  document.querySelectorAll('.panel').forEach(function(p,j){p.classList.toggle('active',i===j);});
+}
+function buildPanel(ti){
+  var tier=TIERS[ti];
+  var panel=document.getElementById('panel-'+ti);
+  panel.innerHTML=
+    '<div class="slabel">'+tier.name+' — '+tier.band+'</div>'+
+    '<div class="note">Every game win earns a reward. Cashback outcomes (green) are % of the qualifying transaction. Credit outcomes (blue) are fixed dollar amounts. Cashback capped at $100.</div>'+
+    '<div class="inputs-grid"><div class="input-group"><label>Avg transactions per user/month</label>'+
+    '<input type="number" id="txns-'+ti+'" value="'+tier.txnsPerUser+'" min="0" step="1" oninput="recalcAll()">'+
+    '<span class="hint">Qualifying transactions in this band</span></div></div>'+
+    '<div class="metric-grid" id="metrics-'+ti+'"></div>'+
+    '<p style="font-size:12px;color:#9ca3af;margin-bottom:8px">Probabilities to 3 decimal places. Total must equal 100%. Cashback EV calculated using transaction midpoint.</p>'+
+    '<table><thead><tr>'+
+    '<th style="width:30%">Outcome</th>'+
+    '<th style="width:10%">Type</th>'+
+    '<th style="width:18%">Probability (%)</th>'+
+    '<th style="width:14%">Value ($)</th>'+
+    '<th style="width:14%">EV contribution</th>'+
+    '<th style="width:14%">Share of EV</th>'+
+    '</tr></thead>'+
+    '<tbody id="tbody-'+ti+'"></tbody>'+
+    '<tfoot><tr class="total-row">'+
+    '<td colspan="2">Total</td><td id="total-prob-'+ti+'">-</td><td>-</td>'+
+    '<td id="total-ev-'+ti+'">-</td><td>100%</td>'+
+    '</tr></tfoot></table>'+
+    '<div class="warn-box" id="warn-'+ti+'"></div>';
+}
+function recalcTier(ti){
+  var tier=TIERS[ti];
+  var winRate=(parseFloat(document.getElementById('win-rate').value)||35)/100;
+  var txnsEl=document.getElementById('txns-'+ti);
+  var txns=parseFloat(txnsEl?txnsEl.value:tier.txnsPerUser)||0;
+  var totalProb=tier.outcomes.reduce(function(s,o){return s+o.prob;},0);
+  var wheelEV=tier.outcomes.reduce(function(s,o){return s+(o.prob/100)*o.value;},0);
+  var costPerEntry=wheelEV*winRate;
+  var costPerUser=txns*costPerEntry;
+  var maxCashback=tier.minTxn>0?(costPerEntry/tier.minTxn*100):0;
+  var probOk=Math.abs(totalProb-100)<0.005;
+  var evColor=Math.abs(costPerEntry-tier.evTarget)<0.05?'#166534':costPerEntry>tier.evTarget*1.5?'#991B1B':'#1E40AF';
+
+  document.getElementById('metrics-'+ti).innerHTML=
+    '<div class="metric"><div class="metric-label">Wheel EV per spin</div><div class="metric-value">'+fmtD(wheelEV,3)+'</div><div class="metric-sub">Avg reward per winning spin</div></div>'+
+    '<div class="metric"><div class="metric-label">Cost per entry</div><div class="metric-value" style="color:'+evColor+'">'+fmtD(costPerEntry,3)+'</div><div class="metric-sub">Target: '+fmtD(tier.evTarget,2)+'</div></div>'+
+    '<div class="metric"><div class="metric-label">Win probability</div><div class="metric-value" style="color:#166534">'+( winRate*100).toFixed(0)+'%</div><div class="metric-sub">100% of wins get reward</div></div>'+
+    '<div class="metric"><div class="metric-label">Max cashback %</div><div class="metric-value">'+maxCashback.toFixed(2)+'%</div><div class="metric-sub">Cost / $'+tier.minTxn+' min txn</div></div>'+
+    '<div class="metric"><div class="metric-label">Cost per user/month</div><div class="metric-value">'+fmtD(costPerUser,2)+'</div><div class="metric-sub">'+txns+' txns x '+fmtD(costPerEntry,3)+'</div></div>';
+
+  var tbody=document.getElementById('tbody-'+ti);
+  tbody.innerHTML='';
+  var totalEV=wheelEV;
+  tier.outcomes.forEach(function(o,i){
+    var ev=(o.prob/100)*o.value;
+    var share=totalEV>0?(ev/totalEV*100):0;
+    var isCashback=o.type==='cashback';
+    var tr=document.createElement('tr');
+    if(isCashback)tr.className='cashback-row';
+    tr.innerHTML=
+      '<td style="font-size:13px">'+o.label+'</td>'+
+      '<td><span class="type-badge '+(isCashback?'type-cashback':'type-credit')+'">'+(isCashback?'cashback':'credit')+'</span></td>'+
+      '<td><input type="number" class="prob-inp" min="0" max="100" step="0.001" value="'+o.prob.toFixed(3)+'" oninput="TIERS['+ti+'].outcomes['+i+'].prob=parseFloat(this.value)||0;recalcTier('+ti+');updateSummary()"></td>'+
+      '<td><input type="number" class="val-inp" min="0" max="10000" step="0.05" value="'+o.value.toFixed(2)+'" oninput="TIERS['+ti+'].outcomes['+i+'].value=parseFloat(this.value)||0;recalcTier('+ti+');updateSummary()"></td>'+
+      '<td class="calc-cell">'+fmtD(ev,3)+'</td>'+
+      '<td style="font-size:12px;color:#9ca3af">'+(totalEV>0?share.toFixed(1):'0.0')+'%</td>';
+    tbody.appendChild(tr);
+  });
+
+  var probColor=probOk?'#166534':'#991B1B';
+  document.getElementById('total-prob-'+ti).innerHTML='<span style="color:'+probColor+';font-weight:600">'+totalProb.toFixed(3)+'%</span>';
+  document.getElementById('total-ev-'+ti).textContent=fmtD(wheelEV,3);
+
+  var warn=document.getElementById('warn-'+ti);
+  if(!probOk){
+    warn.className='warn-box show';
+    var diff=Math.abs(totalProb-100).toFixed(3);
+    warn.textContent=totalProb>100?'Probabilities sum to '+totalProb.toFixed(3)+'% — reduce by '+diff+'% to balance.':'Probabilities sum to '+totalProb.toFixed(3)+'% — increase by '+diff+'% to balance.';
+  } else {warn.className='warn-box';}
+}
+function updateSummary(){
+  var winRate=(parseFloat(document.getElementById('win-rate').value)||35)/100;
+  var mau=parseFloat(document.getElementById('mau').value)||1000;
+  var totalCostPerUser=0;var totalTxns=0;
+  TIERS.forEach(function(_,ti){
+    var txnsEl=document.getElementById('txns-'+ti);
+    var txns=parseFloat(txnsEl?txnsEl.value:TIERS[ti].txnsPerUser)||0;
+    var wheelEV=TIERS[ti].outcomes.reduce(function(s,o){return s+(o.prob/100)*o.value;},0);
+    totalCostPerUser+=txns*(wheelEV*winRate);
+    totalTxns+=txns;
+  });
+  var monthlyTotal=totalCostPerUser*mau;
+  document.getElementById('summary-grid').innerHTML=
+    '<div class="summary-metric"><div class="summary-metric-label">Total txns per user/month</div><div class="summary-metric-value">'+totalTxns.toFixed(0)+'</div></div>'+
+    '<div class="summary-metric"><div class="summary-metric-label">Total cost per user/month</div><div class="summary-metric-value">'+fmtD(totalCostPerUser,2)+'</div></div>'+
+    '<div class="summary-metric"><div class="summary-metric-label">MAU</div><div class="summary-metric-value">'+fmtN(mau)+'</div></div>'+
+    '<div class="summary-metric"><div class="summary-metric-label">Total monthly liability</div><div class="summary-metric-value">'+fmtDL(monthlyTotal)+'</div><div class="summary-metric-sub">'+fmtDL(monthlyTotal*12)+' / yr</div></div>';
+}
+function recalcAll(){TIERS.forEach(function(_,ti){recalcTier(ti);});updateSummary();}
+TIERS.forEach(function(_,ti){buildPanel(ti);});
+recalcAll();
+</script>
+</body>
+</html>
