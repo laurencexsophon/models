@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pyre — Profit vs Users by Geography</title>
+<style>
+  :root{--ink:#111;--mid:#555;--mute:#888;--line:#e3e3de;--bg:#fff;--card:#f7f7f4}
+  *{box-sizing:border-box}
+  body{margin:0;padding:18px;font:400 14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  h1{font-size:18px;font-weight:500;margin:0 0 2px}
+  .sub{font-size:12px;color:var(--mute);margin:0 0 16px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--mid);margin-bottom:10px}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .sw{width:10px;height:10px;border-radius:2px;display:inline-block}
+  .wrap{position:relative;width:100%;height:330px}
+  .ctrls{display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin:16px 0 6px;padding:12px 14px;background:var(--card);border-radius:8px}
+  .ctrl{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--mid)}
+  .ctrl input[type=range]{width:130px}
+  .val{font-weight:500;color:var(--ink);min-width:44px;font-variant-numeric:tabular-nums}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px}
+  .card{background:var(--card);border-radius:8px;padding:11px 13px}
+  .card .lbl{font-size:11px;color:var(--mute);text-transform:none}
+  .card .num{font-size:19px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:2px}
+  .note{font-size:11px;color:var(--mute);margin-top:14px;line-height:1.6}
+  @media (prefers-color-scheme:dark){
+    :root{--ink:#eee;--mid:#bbb;--mute:#999;--line:#333;--bg:transparent;--card:#1e1e1d}
+  }
+</style>
+</head>
+<body>
+<h1>Pyre — monthly profit vs users, by geography</h1>
+<p class="sub">Wirex Enterprise: 60% / 70% / 80% interchange share at $0–25M / $25–35M / $35M+ monthly volume (cliff basis). Includes full cost stack.</p>
+
+<div class="legend">
+  <span><i class="sw" style="background:#2a78d6"></i>US — 1.40% interchange</span>
+  <span><i class="sw" style="background:#eb6834"></i>LatAm blended — 0.80%</span>
+  <span><i class="sw" style="background:#e34948"></i>EEA / UK — 0.20%</span>
+</div>
+
+<div class="wrap"><canvas id="c" role="img" aria-label="Line chart of monthly profit versus user count for US, LatAm and EEA regions."></canvas></div>
+
+<div class="ctrls">
+  <label class="ctrl">Cashback <input type="range" id="cb" min="0" max="2" step="0.05" value="1"><span class="val" id="cbv">1.00%</span></label>
+  <label class="ctrl">Spend/user <input type="range" id="sp" min="500" max="5000" step="100" value="2500"><span class="val" id="spv">$2,500</span></label>
+  <label class="ctrl">Deposit/user <input type="range" id="dp" min="0" max="10000" step="250" value="3250"><span class="val" id="dpv">$3,250</span></label>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="lbl">US net / user / month</div><div class="num" id="k1">—</div></div>
+  <div class="card"><div class="lbl">LatAm net / user / month</div><div class="num" id="k2">—</div></div>
+  <div class="card"><div class="lbl">EEA net / user / month</div><div class="num" id="k3">—</div></div>
+  <div class="card"><div class="lbl">US breakeven users</div><div class="num" id="k4">—</div></div>
+</div>
+
+<p class="note">Standalone region view: the full $20k/month Wirex platform fee is charged to each geography. Costs per user comprise cashback, 10bps on/offramp, and $1.00 inactive-card fee on 10% of cards. Revenue comprises interchange (gross rate x Wirex share) plus PYREUSD reserve yield at 3.6% net of Bridge's performance fee. Values at 80% share tier shown in the cards.</p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+var RATES={us:0.0140,la:0.0080,ee:0.0020};
+var T1=25000000,T2=35000000,S1=0.60,S2=0.70,S3=0.80;
+var YIELD=0.036,RAMP=10,INACT_FEE=1.00,INACT_PCT=0.10,PLATFORM=20000;
+var USERS=[0,1000,2000,3000,4000,5000,6000,7000,8000,9000,10000,11000,12000,13000,14000,15000,16000,18000,20000];
+
+function share(vol){return vol>=T2?S3:(vol>=T1?S2:S1);}
+function costPU(spend,cb){return spend*cb + spend*RAMP/10000 + INACT_PCT*INACT_FEE;}
+function netPU(rate,sh,spend,dep,cb){return spend*rate*sh + dep*YIELD/12 - costPU(spend,cb);}
+function profit(n,rate,spend,dep,cb){
+  if(n===0) return -PLATFORM;
+  return n*netPU(rate,share(n*spend),spend,dep,cb) - PLATFORM;
+}
+function series(rate,spend,dep,cb){return USERS.map(function(n){return profit(n,rate,spend,dep,cb);});}
+function money(v){var s=v<0?'-':'';return s+'$'+Math.abs(Math.round(v/1000)).toLocaleString()+'k';}
+function money2(v){var s=v<0?'-':'';return s+'$'+Math.abs(v).toFixed(2);}
+
+var ctx=document.getElementById('c');
+var chart=new Chart(ctx,{type:'line',
+ data:{labels:USERS,datasets:[
+  {label:'US',data:[],borderColor:'#2a78d6',borderWidth:2,pointRadius:0,tension:0},
+  {label:'LatAm',data:[],borderColor:'#eb6834',borderWidth:2,borderDash:[7,4],pointRadius:0,tension:0},
+  {label:'EEA',data:[],borderColor:'#e34948',borderWidth:2,borderDash:[2,3],pointRadius:0,tension:0}]},
+ options:{responsive:true,maintainAspectRatio:false,animation:{duration:200},
+  interaction:{mode:'index',intersect:false},
+  plugins:{legend:{display:false},
+   tooltip:{callbacks:{title:function(i){return Math.round(i[0].parsed.x).toLocaleString()+' users';},
+    label:function(c){return c.dataset.label+': '+money(c.parsed.y);}}}},
+  scales:{
+   x:{type:'linear',min:0,max:20000,title:{display:true,text:'Users',color:'#898781',font:{size:12}},
+      ticks:{color:'#898781',font:{size:11},stepSize:2500,callback:function(v){return Math.round(v/1000)+'k';}},
+      grid:{display:false}},
+   y:{title:{display:true,text:'Monthly profit',color:'#898781',font:{size:12}},
+      ticks:{color:'#898781',font:{size:11},callback:money},
+      grid:{color:function(c){return c.tick.value===0?'#c3c2b7':'#e8e8e4';},
+            lineWidth:function(c){return c.tick.value===0?1.5:1;}}}}}});
+
+function render(){
+  var cb=parseFloat(document.getElementById('cb').value)/100;
+  var sp=parseFloat(document.getElementById('sp').value);
+  var dp=parseFloat(document.getElementById('dp').value);
+  document.getElementById('cbv').textContent=(cb*100).toFixed(2)+'%';
+  document.getElementById('spv').textContent='$'+sp.toLocaleString();
+  document.getElementById('dpv').textContent='$'+dp.toLocaleString();
+  chart.data.datasets[0].data=series(RATES.us,sp,dp,cb);
+  chart.data.datasets[1].data=series(RATES.la,sp,dp,cb);
+  chart.data.datasets[2].data=series(RATES.ee,sp,dp,cb);
+  chart.update();
+  var nu=netPU(RATES.us,S3,sp,dp,cb),nl=netPU(RATES.la,S3,sp,dp,cb),ne=netPU(RATES.ee,S3,sp,dp,cb);
+  document.getElementById('k1').textContent=money2(nu);
+  document.getElementById('k2').textContent=money2(nl);
+  document.getElementById('k3').textContent=money2(ne);
+  var n1=netPU(RATES.us,S1,sp,dp,cb);
+  var be='never';
+  if(n1>0){var b=Math.ceil(PLATFORM/n1); if(b*sp<T1) be=b.toLocaleString();}
+  if(be==='never'){var n2=netPU(RATES.us,S2,sp,dp,cb);
+    if(n2>0){var b2=Math.max(Math.ceil(PLATFORM/n2),Math.ceil(T1/sp)); if(b2*sp<T2) be=b2.toLocaleString();}}
+  if(be==='never'){var n3=netPU(RATES.us,S3,sp,dp,cb);
+    if(n3>0){be=Math.max(Math.ceil(PLATFORM/n3),Math.ceil(T2/sp)).toLocaleString();}}
+  document.getElementById('k4').textContent=be;
+}
+['cb','sp','dp'].forEach(function(id){document.getElementById(id).addEventListener('input',render);});
+render();
+</script>
+</body>
+</html>
